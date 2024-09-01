@@ -1,21 +1,13 @@
 {
-  "name": "nextjs",
-  "version": "0.1.0",
-  "private": true,
+  "name": "my-proxy-server",
+  "version": "1.0.0",
+  "main": "api/proxy.js",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
+    "start": "vercel dev"
   },
   "dependencies": {
-    "next": "13.0.0",
-    "react": "18.2.0",
-    "react-dom": "18.2.0"
-  },
-  "devDependencies": {
-    "eslint": "8.26.0",
-    "eslint-config-next": "13.0.0",
-    "http-proxy-middleware": "^2.0.6"
+    "http-proxy": "^1.18.1",
+    "cheerio": "^1.0.0-rc.10",
+    "dotenv": "^16.0.0"
   }
 }
