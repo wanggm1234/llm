@@ -7,10 +7,14 @@ dotenv.config();
 
 const proxy = httpProxy.createProxyServer({});
 
-// 从环境变量中获取用户名和密码
 const USERNAME = process.env.PROXY_USERNAME;
 const PASSWORD = process.env.PROXY_PASSWORD;
 const PROXY_SERVER_URL = process.env.PROXY_SERVER_URL;
+
+if (!USERNAME || !PASSWORD || !PROXY_SERVER_URL) {
+    console.error('Missing environment variables');
+    process.exit(1);
+}
 
 function authenticate(req) {
     const authHeader = req.headers['authorization'];
@@ -24,6 +28,9 @@ function authenticate(req) {
 }
 
 function modifyHtmlContent(body) {
+    if (!body) {
+        throw new Error('HTML content is undefined');
+    }
     const $ = cheerio.load(body);
     $('a').each((index, element) => {
         const originalUrl = $(element).attr('href');
@@ -37,7 +44,6 @@ function modifyNonHtmlContent(req, proxyRes, res) {
     const originalUrl = req.url;
     const modifiedUrl = `${PROXY_SERVER_URL}${originalUrl}`;
 
-    // 修改响应头中的 content-location 和 location
     if (proxyRes.headers['content-location']) {
         proxyRes.headers['content-location'] = modifiedUrl;
     }
@@ -70,11 +76,20 @@ export default function handler(req, res) {
 
     proxy.web(req, res, proxyOptions, (err) => {
         console.error('Proxy error:', err);
-        res.status(500).send('Proxy Error');
+        res.status(500).send('Proxy Error: ' + err.message);
     });
 
     proxy.on('proxyRes', (proxyRes, req, res) => {
         const contentType = proxyRes.headers['content-type'];
+
+        if ([301, 302].includes(proxyRes.statusCode)) {
+            const location = proxyRes.headers['location'];
+            if (location) {
+                proxyRes.headers['location'] = `${PROXY_SERVER_URL}${location}`;
+            }
+            res.writeHead(proxyRes.statusCode, proxyRes.headers);
+            return res.end();
+        }
 
         if (contentType && contentType.includes('text/html')) {
             let body = '';
@@ -87,7 +102,6 @@ export default function handler(req, res) {
                 res.end(modifiedHtml);
             });
         } else if (contentType) {
-            // 处理非 HTML 内容
             modifyNonHtmlContent(req, proxyRes, res);
         } else {
             res.writeHead(500, { 'Content-Type': 'text/plain' });
@@ -95,3 +109,4 @@ export default function handler(req, res) {
         }
     });
 }
+
