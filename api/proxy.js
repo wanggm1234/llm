@@ -32,11 +32,17 @@ function modifyHtmlContent(body) {
         throw new Error('HTML content is undefined');
     }
     const $ = cheerio.load(body);
+    
+    // 修改所有链接
     $('a').each((index, element) => {
         const originalUrl = $(element).attr('href');
-        const modifiedUrl = `${PROXY_SERVER_URL}/${originalUrl}`;
+        const modifiedUrl = new URL(originalUrl, PROXY_SERVER_URL).href;
         $(element).attr('href', modifiedUrl);
     });
+
+    // 添加自定义属性
+    $('body').attr('data-proxy', 'true');
+
     return $.html();
 }
 
@@ -56,6 +62,7 @@ function modifyNonHtmlContent(req, proxyRes, res) {
 }
 
 export default function handler(req, res) {
+    // 认证请求
     if (!authenticate(req)) {
         res.setHeader('WWW-Authenticate', 'Basic realm="Proxy Server"');
         return res.status(401).send('Unauthorized');
@@ -74,14 +81,17 @@ export default function handler(req, res) {
         secure: isHttps,
     };
 
+    // 代理请求
     proxy.web(req, res, proxyOptions, (err) => {
         console.error('Proxy error:', err);
         res.status(500).send('Proxy Error: ' + err.message);
     });
 
+    // 处理代理响应
     proxy.on('proxyRes', (proxyRes, req, res) => {
         const contentType = proxyRes.headers['content-type'];
 
+        // 处理重定向
         if ([301, 302].includes(proxyRes.statusCode)) {
             const location = proxyRes.headers['location'];
             if (location) {
@@ -91,6 +101,7 @@ export default function handler(req, res) {
             return res.end();
         }
 
+        // 处理 HTML 内容
         if (contentType && contentType.includes('text/html')) {
             let body = '';
             proxyRes.on('data', (chunk) => {
@@ -98,15 +109,21 @@ export default function handler(req, res) {
             });
 
             proxyRes.on('end', () => {
-                const modifiedHtml = modifyHtmlContent(body);
-                res.end(modifiedHtml);
+                try {
+                    const modifiedHtml = modifyHtmlContent(body);
+                    res.end(modifiedHtml);
+                } catch (error) {
+                    console.error('Error modifying HTML content:', error);
+                    res.status(500).send('Error modifying HTML content');
+                }
             });
         } else if (contentType) {
+            // 处理非 HTML 内容
             modifyNonHtmlContent(req, proxyRes, res);
         } else {
+            // 不支持的内容类型
             res.writeHead(500, { 'Content-Type': 'text/plain' });
             res.end('Unsupported content type');
         }
     });
 }
-
